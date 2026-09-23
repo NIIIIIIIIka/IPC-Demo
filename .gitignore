@@ -1,0 +1,13 @@
+# 可执行文件
+aeron-demo/publisher
+aeron-demo/subscriber
+
+# 外部依赖（aeron 是独立 git 仓库，不作为 submodule 提交）
+aeron-demo/aeron/
+
+# 通用构建产物
+*.o
+*.obj
+*.exe
+build/
+cmake-build-*/
