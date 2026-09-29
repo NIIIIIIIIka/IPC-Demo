@@ -7,6 +7,7 @@
 | 目录 | 通信方式 | 说明 |
 |------|----------|------|
 | `aeron-demo/` | Aeron (UDP IPC) | 基于 Aeron 库的高性能 pub/sub，使用 `aeron:ipc` 通道 |
+| `iceoryx2-demo/` | iceoryx2 (零拷贝共享内存) | C++ Pub/Sub，展示固定结构体和 1 MiB 动态 payload 的 loan/send/receive |
 | `pipe-demo/` | 匿名管道 (Pipe) | 最简单的进程间通信，通过 shell 管道 `|` 串联 |
 | `fifo-demo/` | 命名管道 (FIFO) | 通过文件系统中的命名管道传输数据，独立进程间通信 |
 | `uds-demo/` | Unix Domain Socket | 基于 `AF_UNIX` 的本地 socket 通信，支持 stream/datagram |
@@ -25,6 +26,9 @@ cd pipe-demo && make
 # 编译所有 demo
 make -C pipe-demo && make -C fifo-demo && make -C uds-demo \
   && make -C tcp-demo && make -C shm-demo && make -C msgqueue-demo
+
+# 编译需要额外依赖的 Aeron 与 iceoryx2 示例
+make optional
 ```
 
 ## 运行方式
@@ -99,6 +103,21 @@ cd msgqueue-demo
 ```
 
 队列 key 为 `12345`，subscriber 接收后自动清理队列。
+
+### iceoryx2-demo — 零拷贝共享内存
+
+包含固定结构体和 1 MiB 动态 payload 两个示例。详细的依赖、构建和运行步骤见 [`iceoryx2-demo/README.md`](iceoryx2-demo/README.md)。
+
+```bash
+cd iceoryx2-demo
+git clone --depth 1 https://github.com/eclipse-iceoryx/iceoryx2.git
+make
+
+# 终端 1
+./large-message/subscriber
+# 终端 2
+./large-message/publisher
+```
 
 ## 各方式对比
 

@@ -1,8 +1,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -12,78 +14,82 @@ using namespace aeron;
 
 namespace
 {
-
 constexpr std::int32_t STREAM_ID = 2001;
 constexpr int POLL_FRAGMENT_LIMIT = 100;
-constexpr std::size_t REPORT_INTERVAL = 1'000'000;
 
-std::shared_ptr<Subscription> awaitSubscription(Aeron &aeron, std::int64_t registrationId)
+long parseLong(const char *value, const char *name)
+{
+    try
+    {
+        std::size_t used = 0;
+        const long parsed = std::stol(value, &used);
+        if (value[used] != '\0') throw std::invalid_argument("trailing characters");
+        return parsed;
+    }
+    catch (const std::exception &)
+    {
+        std::cerr << "invalid " << name << ": " << value << '\n';
+        std::exit(2);
+    }
+}
+
+std::shared_ptr<Subscription> awaitSubscription(Aeron &aeron, std::int64_t id)
 {
     std::shared_ptr<Subscription> subscription;
     while (!subscription)
     {
-        subscription = aeron.findSubscription(registrationId);
+        subscription = aeron.findSubscription(id);
         std::this_thread::yield();
     }
     return subscription;
 }
-
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
-    const std::string channel = "aeron:ipc";
+    if (argc > 3 || (argc > 1 && std::string(argv[1]) == "--help"))
+    {
+        std::cout << "Usage: ./subscriber [delay-us=0] [label=consumer]\n"
+                  << "A positive delay sleeps after each received fragment to simulate a slow consumer.\n";
+        return argc > 3 ? 2 : 0;
+    }
+    const long delayUs = argc > 1 ? parseLong(argv[1], "delay-us") : 0;
+    const std::string label = argc > 2 ? argv[2] : "consumer";
+    if (delayUs < 0 || delayUs > 10'000'000)
+    {
+        std::cerr << "delay-us must be between 0 and 10000000\n";
+        return 2;
+    }
 
     Context context;
     auto aeron = Aeron::connect(context);
-
-    const std::int64_t registrationId = aeron->addSubscription(channel, STREAM_ID);
+    const auto registrationId = aeron->addSubscription("aeron:ipc", STREAM_ID);
     auto subscription = awaitSubscription(*aeron, registrationId);
+    std::uint64_t messages = 0, bytes = 0, lastMessages = 0, lastBytes = 0;
+    auto lastReport = std::chrono::steady_clock::now();
 
-    std::atomic<std::uint64_t> messageCount{0};
-    std::atomic<std::uint64_t> byteCount{0};
-
-    const auto start = std::chrono::steady_clock::now();
-    auto lastReport = start;
-    std::uint64_t lastMessages = 0;
-    std::uint64_t lastBytes = 0;
-
-    fragment_handler_t handler =
-        [&](AtomicBuffer &buffer, util::index_t offset, util::index_t length, Header &)
+    fragment_handler_t handler = [&](AtomicBuffer &buffer, util::index_t offset, util::index_t length, Header &)
+    {
+        (void)buffer; (void)offset;
+        ++messages;
+        bytes += static_cast<std::uint64_t>(length);
+        if (delayUs > 0) std::this_thread::sleep_for(std::chrono::microseconds(delayUs));
+        if (messages % 100'000 == 0)
         {
-            const auto now = messageCount.fetch_add(1, std::memory_order_relaxed) + 1;
-            const auto bytes = byteCount.fetch_add(static_cast<std::uint64_t>(length),
-                                                   std::memory_order_relaxed) +
-                               static_cast<std::uint64_t>(length);
+            const auto now = std::chrono::steady_clock::now();
+            const double seconds = std::chrono::duration<double>(now - lastReport).count();
+            if (seconds > 0.0)
+                std::cout << "subscriber '" << label << "': " << messages
+                          << " messages, " << ((messages - lastMessages) / seconds) << " msg/s, "
+                          << ((bytes - lastBytes) / (1024.0 * 1024.0) / seconds) << " MiB/s\n" << std::flush;
+            lastMessages = messages; lastBytes = bytes; lastReport = now;
+        }
+    };
 
-            if (now % REPORT_INTERVAL == 0)
-            {
-                const auto reportNow = std::chrono::steady_clock::now();
-                const std::chrono::duration<double> reportElapsed = reportNow - lastReport;
-                const double seconds = reportElapsed.count();
-                if (seconds > 0.0)
-                {
-                    const std::uint64_t deltaMessages = now - lastMessages;
-                    const std::uint64_t deltaBytes = bytes - lastBytes;
-                    std::cout << "recv: " << now << " messages, "
-                              << (deltaMessages / seconds) << " msg/s, "
-                              << (deltaBytes / (1024.0 * 1024.0) / seconds) << " MB/s\n"
-                              << std::flush;
-                }
-                lastReport = reportNow;
-                lastMessages = now;
-                lastBytes = bytes;
-            }
-        };
-
-    std::cout << "Streaming subscriber started (stream=" << STREAM_ID << ")\n";
-
+    std::cout << "Streaming subscriber '" << label << "' started (stream=" << STREAM_ID
+              << ", delay-us=" << delayUs << ")\n";
     while (true)
     {
-        const int fragments = subscription->poll(handler, POLL_FRAGMENT_LIMIT);
-        if (fragments == 0)
-        {
-            std::this_thread::yield();
-        }
+        if (subscription->poll(handler, POLL_FRAGMENT_LIMIT) == 0) std::this_thread::yield();
     }
 }
