@@ -8,6 +8,7 @@
 |---|---|
 | `basic/` | 固定大小结构体的发布/订阅，展示 `loan_uninit()`、原地构造和 `send()` |
 | `large-message/` | 10 条 1 MiB 动态 payload，展示共享内存 slice、零拷贝接收和内容校验 |
+| `payload-benchmark/` | 依次比较 64 B 与 1 MiB；分开统计原地填充和 `send()`，自带 CMake 与一键启动脚本 |
 
 > 注意：不同进程可以把同一共享内存映射到不同虚拟地址。日志中的地址只用于观察映射，不能单独证明两个地址对应同一物理页；零拷贝依据是 iceoryx2 的 loaned sample 生命周期和收发路径中没有 payload `memcpy`。
 
@@ -36,6 +37,32 @@ make
 ```
 
 首次构建会编译并安装 iceoryx2 C/C++ bindings 到源码树下的 `target/ff/cc/install`，耗时通常明显长于其他 IPC Demo。
+
+## 一键运行 Payload 对比（推荐）
+
+Linux 下执行：
+
+```bash
+cd IPC-Demo/iceoryx2-demo/payload-benchmark
+./run_demo.sh
+```
+
+脚本会在需要时下载、构建并安装 iceoryx2，然后自动完成 64 B 和 1 MiB 两轮 subscriber/publisher 演示。每轮默认 200 条，可通过 `SMALL_COUNT`、`LARGE_COUNT` 调整：
+
+```bash
+SMALL_COUNT=500 LARGE_COUNT=100 ./run_demo.sh
+```
+
+输出把“原地填充 payload”和“提交共享内存句柄”的时间分开统计。1 MiB 的初始化成本必然高于 64 B；零拷贝保证的是 `send/receive` 阶段不再复制整个 payload，而不是生成 1 MiB 数据不需要时间。
+
+手工 CMake 构建：
+
+```bash
+cmake -S payload-benchmark -B payload-benchmark/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$PWD/iceoryx2/target/ff/cc/install"
+cmake --build payload-benchmark/build -j"$(nproc)"
+```
 
 ## 运行 basic
 
@@ -81,4 +108,3 @@ make distclean   # 另外删除 iceoryx2 构建与安装产物
 - <https://github.com/eclipse-iceoryx/iceoryx2/tree/main/examples/cxx/publish_subscribe>
 - <https://github.com/eclipse-iceoryx/iceoryx2/tree/main/examples/cxx/publish_subscribe_dynamic_data>
 - <https://github.com/eclipse-iceoryx/iceoryx2/tree/main/iceoryx2-cxx>
-

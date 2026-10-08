@@ -10,6 +10,7 @@
 | `streaming/` | 可配置消息数、消息大小、发送速率和慢消费者；输出吞吐及发布端背压计数 |
 | `large-message/` | 大消息分片、`FragmentAssembler` 重组和校验 |
 | `exclusive/` | `ExclusivePublication`、`tryClaim` 及两个 Stream 并发发送 |
+| `backpressure/` | 中文日志展示慢消费者触发 `BACK_PRESSURED`；自带 CMake 和一键启动脚本 |
 
 ## 依赖和构建
 
@@ -28,6 +29,33 @@ make
 首次构建会编译 Aeron 静态库，需要几分钟。
 
 ## 启动
+
+### 一键演示背压（推荐）
+
+Linux 下执行以下一条命令即可自动下载/构建 Aeron、启动 Media Driver 和慢订阅者、运行发布者，并在结束后清理后台进程：
+
+```bash
+cd backpressure
+./run_demo.sh
+```
+
+首次运行需要网络和较长编译时间。日志保存在 `backpressure/build/logs/`。可用环境变量调整演示强度，例如：
+
+```bash
+MESSAGE_COUNT=8000 PAYLOAD_SIZE=65536 ./run_demo.sh
+```
+
+该示例默认使用 64 KiB 消息高速发送，而订阅端每 500 ms 仅轮询 10 个 fragment，因此能比原始的短字符串/50 ms 发送设置更快、更稳定地观察到背压。
+
+手工 CMake 构建方式：
+
+```bash
+cmake -S backpressure -B backpressure/build -DCMAKE_BUILD_TYPE=Release \
+  -DAERON_DIR="$PWD/aeron"
+cmake --build backpressure/build --target publisher subscriber aeronmd -j"$(nproc)"
+```
+
+### 其他示例
 
 先启动 Media Driver：
 

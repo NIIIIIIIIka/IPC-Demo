@@ -119,6 +119,18 @@ make
 ./large-message/publisher
 ```
 
+### 新增的一键演示
+
+以下脚本会自动执行 CMake 配置、构建并拉起所需进程（仅支持 Linux）：
+
+```bash
+# Aeron 显式背压
+cd aeron-demo/backpressure && ./run_demo.sh
+
+# iceoryx2：64 B 与 1 MiB 零拷贝路径对比
+cd iceoryx2-demo/payload-benchmark && ./run_demo.sh
+```
+
 ## 各方式对比
 
 | 方式 | 方向 | 生命周期 | 同步机制 | 典型场景 |
